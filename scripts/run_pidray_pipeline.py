@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import shlex
 import subprocess
 import sys
@@ -106,6 +107,16 @@ def run(command: list[str], dry_run: bool = False) -> None:
     if dry_run:
         return
     subprocess.run(command, cwd=PROJECT_ROOT, check=True)
+
+
+def require_python_module(module_name: str, install_hint: str) -> None:
+    if importlib.util.find_spec(module_name) is not None:
+        return
+    raise RuntimeError(
+        f"Required Python module is not installed in this environment: {module_name}\n"
+        f"Install it with:\n  {install_hint}\n"
+        "If you created a virtual environment, activate it before running the pipeline."
+    )
 
 
 def extract_archives(raw_dir: Path) -> None:
@@ -246,6 +257,7 @@ def main() -> None:
         outputs_dir.mkdir(parents=True, exist_ok=True)
 
     if not args.skip_download:
+        require_python_module("gdown", f"{sys.executable} -m pip install -r requirements.txt")
         run(
             [
                 sys.executable,

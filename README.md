@@ -176,6 +176,25 @@ On a RunPod Pod, write generated data to the persistent volume instead of the co
 python scripts/run_pidray_pipeline.py --runpod --hardware-preset rtx5090 --experiment-set balanced --device 0
 ```
 
+Run it with `nohup` after installing dependencies in the same Python environment:
+
+```bash
+cd /root/workspace/CIXDet
+python -m pip install -r requirements.txt
+mkdir -p /workspace/CIXDet_data/logs
+nohup python scripts/run_pidray_pipeline.py --runpod --hardware-preset rtx5090 --experiment-set balanced --device 0 > /workspace/CIXDet_data/logs/pidray_pipeline.log 2>&1 &
+tail -f /workspace/CIXDet_data/logs/pidray_pipeline.log
+```
+
+If you use a virtual environment, run `nohup` with the venv Python:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+nohup .venv/bin/python scripts/run_pidray_pipeline.py --runpod --hardware-preset rtx5090 --experiment-set balanced --device 0 > /workspace/CIXDet_data/logs/pidray_pipeline.log 2>&1 &
+```
+
 By default, `--runpod` stores generated files under `/workspace/CIXDet_data`:
 
 - `/workspace/CIXDet_data/datasets/pidray_raw`
@@ -195,6 +214,18 @@ Or use the bash wrapper:
 ```bash
 chmod +x scripts/run_pidray_pipeline_linux.sh
 ./scripts/run_pidray_pipeline_linux.sh
+```
+
+The wrapper installs `requirements.txt` before running the pipeline using the same Python executable. To skip dependency installation on later runs:
+
+```bash
+INSTALL_REQUIREMENTS=0 ./scripts/run_pidray_pipeline_linux.sh
+```
+
+To force a specific Python executable:
+
+```bash
+PYTHON_BIN=.venv/bin/python ./scripts/run_pidray_pipeline_linux.sh
 ```
 
 The wrapper defaults to `STORAGE_ROOT=/workspace/CIXDet_data`. Override it if your mount path differs:
