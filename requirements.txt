@@ -10,3 +10,6 @@ torchvision
 scikit-learn
 matplotlib
 gdown
+datasets
+huggingface_hub
+hf_xet

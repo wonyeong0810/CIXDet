@@ -27,6 +27,16 @@ def parse_args() -> argparse.Namespace:
         description="Run the PIDray pipeline: download, convert, split, train, evaluate, CIGG, and figures."
     )
     parser.add_argument("--download-url", default=PIDRAY_GDRIVE_FOLDER_URL, help="Official PIDray Google Drive folder URL.")
+    parser.add_argument(
+        "--download-source",
+        choices=["gdrive", "hf", "local"],
+        default="gdrive",
+        help="Use gdrive download, Hugging Face subset conversion, or an already-downloaded local PIDray folder.",
+    )
+    parser.add_argument("--hf-repo-id", default="Voxel51/PIDray")
+    parser.add_argument("--hf-split", default="train")
+    parser.add_argument("--hf-cache-dir", default="hf_cache")
+    parser.add_argument("--hf-max-samples", type=int)
     parser.add_argument("--raw-dir", default="datasets/pidray_raw", help="Where PIDray raw files are downloaded/extracted.")
     parser.add_argument("--yolo-dir", default="dataset_yolo", help="Converted YOLO dataset directory.")
     parser.add_argument("--splits-dir", default="dataset_yolo/splits", help="YOLO split output directory.")
@@ -101,6 +111,7 @@ def apply_storage_root(args: argparse.Namespace) -> argparse.Namespace:
     args.splits_dir = resolve_workspace_path(args.splits_dir, storage_root).as_posix()
     args.outputs_dir = resolve_workspace_path(args.outputs_dir, storage_root).as_posix()
     args.project = resolve_workspace_path(args.project, storage_root).as_posix()
+    args.hf_cache_dir = resolve_workspace_path(args.hf_cache_dir, storage_root).as_posix()
     args.object_crops_dir = resolve_workspace_path("object_crops", storage_root).as_posix()
     return args
 
@@ -330,7 +341,27 @@ def main() -> None:
         raw_dir.mkdir(parents=True, exist_ok=True)
         outputs_dir.mkdir(parents=True, exist_ok=True)
 
-    if not args.skip_download:
+    if args.download_source == "hf":
+        hf_command = [
+            sys.executable,
+            "scripts/convert_hf_detection_to_yolo.py",
+            "--repo-id",
+            args.hf_repo_id,
+            "--split",
+            args.hf_split,
+            "--output-dir",
+            yolo_dir.as_posix(),
+            "--hf-cache-dir",
+            args.hf_cache_dir,
+            "--composition-strategy",
+            "object_count_proxy",
+        ]
+        if args.hf_max_samples is not None:
+            hf_command.extend(["--max-samples", str(args.hf_max_samples)])
+        run(hf_command, args.dry_run)
+    elif args.download_source == "local":
+        print(f"Using local PIDray files under: {raw_dir}")
+    elif not args.skip_download:
         if not args.dry_run:
             require_python_module("gdown", f"{sys.executable} -m pip install -r requirements.txt")
         download_command = [
@@ -350,14 +381,16 @@ def main() -> None:
     else:
         print(f"Skipping download; using existing raw directory: {raw_dir}")
 
-    if not args.skip_extract:
+    if args.download_source in {"gdrive", "local"} and not args.skip_extract:
         if args.dry_run:
             print("Dry run: archive extraction would run here.")
         else:
             extract_archives(raw_dir, delete_archives_after_extract=args.delete_archives_after_extract)
 
     metadata_csv = yolo_dir / "metadata.csv"
-    if args.reuse_conversion and metadata_csv.exists():
+    if args.download_source == "hf":
+        pass
+    elif args.reuse_conversion and metadata_csv.exists():
         print(f"Skipping conversion; using existing metadata: {metadata_csv}")
     else:
         split_jsons = find_pidray_jsons(raw_dir)

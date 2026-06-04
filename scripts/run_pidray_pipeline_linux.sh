@@ -4,6 +4,10 @@ set -euo pipefail
 PYTHON_BIN="${PYTHON_BIN:-python}"
 INSTALL_REQUIREMENTS="${INSTALL_REQUIREMENTS:-1}"
 SKIP_DOWNLOAD="${SKIP_DOWNLOAD:-0}"
+DOWNLOAD_SOURCE="${DOWNLOAD_SOURCE:-hf}"
+HF_REPO_ID="${HF_REPO_ID:-Voxel51/PIDray}"
+HF_SPLIT="${HF_SPLIT:-train}"
+HF_MAX_SAMPLES="${HF_MAX_SAMPLES:-}"
 GDOWN_CONTINUE="${GDOWN_CONTINUE:-1}"
 HARDWARE_PRESET="${HARDWARE_PRESET:-rtx5090}"
 EXPERIMENT_SET="${EXPERIMENT_SET:-balanced}"
@@ -23,6 +27,9 @@ if [[ "$INSTALL_REQUIREMENTS" != "0" ]]; then
 fi
 
 CMD=("$PYTHON_BIN" scripts/run_pidray_pipeline.py \
+  --download-source "$DOWNLOAD_SOURCE" \
+  --hf-repo-id "$HF_REPO_ID" \
+  --hf-split "$HF_SPLIT" \
   --raw-dir "$RAW_DIR" \
   --storage-root "$STORAGE_ROOT" \
   --hardware-preset "$HARDWARE_PRESET" \
@@ -35,6 +42,7 @@ if [[ -n "$EPOCHS" ]]; then CMD+=(--epochs "$EPOCHS"); fi
 if [[ -n "$IMGSZ" ]]; then CMD+=(--imgsz "$IMGSZ"); fi
 if [[ -n "$BATCH" ]]; then CMD+=(--batch "$BATCH"); fi
 if [[ -n "$WORKERS" ]]; then CMD+=(--workers "$WORKERS"); fi
+if [[ -n "$HF_MAX_SAMPLES" ]]; then CMD+=(--hf-max-samples "$HF_MAX_SAMPLES"); fi
 if [[ "$DELETE_ARCHIVES_AFTER_EXTRACT" != "0" ]]; then CMD+=(--delete-archives-after-extract); fi
 if [[ "$SKIP_DOWNLOAD" != "0" ]]; then CMD+=(--skip-download); fi
 if [[ "$GDOWN_CONTINUE" != "0" ]]; then CMD+=(--gdown-continue); fi

@@ -173,8 +173,16 @@ python scripts/run_pidray_pipeline.py --hardware-preset rtx5090 --experiment-set
 On a RunPod Pod, write generated data to the persistent volume instead of the container disk:
 
 ```bash
-python scripts/run_pidray_pipeline.py --runpod --hardware-preset rtx5090 --experiment-set balanced --device 0
+python scripts/run_pidray_pipeline.py --runpod --download-source hf --hardware-preset rtx5090 --experiment-set balanced --device 0
 ```
+
+The Linux wrapper defaults to the Hugging Face PIDray subset (`Voxel51/PIDray`) to avoid Google Drive quota failures:
+
+```bash
+./scripts/run_pidray_pipeline_linux.sh
+```
+
+The Hugging Face version has 9,482 samples rather than the full official PIDray release. When the HF dataset does not expose original `easy/hard/hidden` split labels, the converter uses an object-count proxy for composition analysis and records this in `dataset_yolo/hf_conversion_report.json`.
 
 To reduce volume usage during extraction, delete archives after each successful extract:
 
@@ -243,7 +251,7 @@ DELETE_ARCHIVES_AFTER_EXTRACT=0 ./scripts/run_pidray_pipeline_linux.sh
 If Google Drive blocks gdown with a quota message, wait and retry:
 
 ```bash
-./scripts/run_pidray_pipeline_linux.sh
+DOWNLOAD_SOURCE=gdrive ./scripts/run_pidray_pipeline_linux.sh
 ```
 
 The wrapper asks gdown to continue partial downloads by default. If you manually download the missing PIDray archives into `/workspace/CIXDet_data/datasets/pidray_raw`, continue without running gdown:
@@ -251,6 +259,17 @@ The wrapper asks gdown to continue partial downloads by default. If you manually
 ```bash
 SKIP_DOWNLOAD=1 ./scripts/run_pidray_pipeline_linux.sh
 ```
+
+For the full official PIDray dataset without Google Drive, use the official Baidu Netdisk link from the PIDray authors, download the files into the RunPod volume, and run from local files:
+
+```bash
+# Put Baidu-downloaded PIDray archives/files here:
+# /workspace/CIXDet_data/datasets/pidray_raw
+
+DOWNLOAD_SOURCE=local ./scripts/run_pidray_pipeline_linux.sh
+```
+
+The official full PIDray release lists Google Drive and Baidu Netdisk mirrors. The Hugging Face `Voxel51/PIDray` dataset is convenient when Google Drive is blocked, but it is a smaller 9,482-sample subset rather than the 124,486-image full release.
 
 The wrapper defaults to `STORAGE_ROOT=/workspace/CIXDet_data`. Override it if your mount path differs:
 
