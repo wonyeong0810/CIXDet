@@ -1,0 +1,14 @@
+dataset_yolo/
+datasets/
+object_crops/
+outputs/
+!outputs/.gitkeep
+runs/
+*.pt
+*.pth
+*.onnx
+*.engine
+__pycache__/
+**/__pycache__/
+.env
+.venv/

@@ -1,0 +1,11 @@
+# Optional class map template.
+# If this file is left empty (names: {}), convert_aihub_to_yolo.py will
+# auto-discover classes and write configs/class_map.yaml.
+#
+# To force a stable class order, edit this file like:
+# names:
+#   0: knife
+#   1: scissors
+#   2: battery
+names: {}
+
