@@ -11,11 +11,12 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PIDRAY_GDRIVE_FOLDER_URL = "https://drive.google.com/drive/folders/1zvMIc1bqteRN9Z36hHYpoTGoZArsh4mE"
+RUNPOD_STORAGE_ROOT = "/workspace/CIXDet_data"
 
 HARDWARE_PRESETS = {
     "generic": {"model": "auto", "epochs": 50, "imgsz": 640, "batch": 8, "workers": 4},
     "rtx5080": {"model": "yolo11s.pt", "epochs": 50, "imgsz": 640, "batch": 8, "workers": 4},
-    "rtx5090": {"model": "yolo11m.pt", "epochs": 100, "imgsz": 768, "batch": 8, "workers": 8},
+    "rtx5090": {"model": "yolo11m.pt", "epochs": 100, "imgsz": 640, "batch": 16, "workers": 8},
 }
 
 
@@ -29,6 +30,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--splits-dir", default="dataset_yolo/splits", help="YOLO split output directory.")
     parser.add_argument("--outputs-dir", default="outputs")
     parser.add_argument("--project", default="runs/detect")
+    parser.add_argument(
+        "--storage-root",
+        help="Persistent storage root for generated data. Relative raw/yolo/splits/outputs/runs paths are placed under it.",
+    )
+    parser.add_argument(
+        "--runpod",
+        action="store_true",
+        help=f"Shortcut for --storage-root {RUNPOD_STORAGE_ROOT}, RunPod Pod volume default.",
+    )
     parser.add_argument("--copy-mode", choices=["copy", "symlink", "hardlink"], default="symlink")
     parser.add_argument("--skip-download", action="store_true", help="Use existing --raw-dir.")
     parser.add_argument("--skip-extract", action="store_true", help="Skip archive extraction.")
@@ -46,6 +56,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch", type=int)
     parser.add_argument("--workers", type=int)
     parser.add_argument("--device", default="0")
+    parser.add_argument("--cache", choices=["none", "ram", "disk"], default="none", help="Optional training image cache mode.")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--debug", action="store_true", help="Use yolo11n.pt, 3 epochs, batch 4.")
     parser.add_argument("--dry-run", action="store_true", help="Print commands without executing.")
@@ -58,6 +69,31 @@ def apply_hardware_preset(args: argparse.Namespace) -> argparse.Namespace:
     for key, value in preset.items():
         if getattr(args, key) is None:
             setattr(args, key, value)
+    return args
+
+
+def resolve_workspace_path(path_value: str, storage_root: Path | None) -> Path:
+    path = Path(path_value)
+    if path.is_absolute():
+        return path
+    if storage_root is not None:
+        return storage_root / path
+    return PROJECT_ROOT / path
+
+
+def apply_storage_root(args: argparse.Namespace) -> argparse.Namespace:
+    if args.runpod and not args.storage_root:
+        args.storage_root = RUNPOD_STORAGE_ROOT
+    storage_root = Path(args.storage_root).expanduser() if args.storage_root else None
+    if storage_root is not None and not args.dry_run:
+        storage_root.mkdir(parents=True, exist_ok=True)
+
+    args.raw_dir = resolve_workspace_path(args.raw_dir, storage_root).as_posix()
+    args.yolo_dir = resolve_workspace_path(args.yolo_dir, storage_root).as_posix()
+    args.splits_dir = resolve_workspace_path(args.splits_dir, storage_root).as_posix()
+    args.outputs_dir = resolve_workspace_path(args.outputs_dir, storage_root).as_posix()
+    args.project = resolve_workspace_path(args.project, storage_root).as_posix()
+    args.object_crops_dir = resolve_workspace_path("object_crops", storage_root).as_posix()
     return args
 
 
@@ -136,33 +172,33 @@ def find_pidray_jsons(raw_dir: Path) -> dict[str, Path]:
 def train_and_eval(args: argparse.Namespace, split_name: str, run_name: str, model_name: str, epochs: int, batch: int) -> None:
     data_yaml = Path(args.splits_dir) / split_name / "data.yaml"
     metadata_test = Path(args.splits_dir) / split_name / "metadata_test.csv"
-    run(
-        [
-            sys.executable,
-            "scripts/train_yolo.py",
-            "--data-yaml",
-            data_yaml.as_posix(),
-            "--model",
-            model_name,
-            "--epochs",
-            str(epochs),
-            "--imgsz",
-            str(args.imgsz),
-            "--batch",
-            str(batch),
-            "--workers",
-            str(args.workers),
-            "--device",
-            str(args.device),
-            "--project",
-            str(args.project),
-            "--name",
-            run_name,
-            "--seed",
-            str(args.seed),
-        ],
-        args.dry_run,
-    )
+    train_command = [
+        sys.executable,
+        "scripts/train_yolo.py",
+        "--data-yaml",
+        data_yaml.as_posix(),
+        "--model",
+        model_name,
+        "--epochs",
+        str(epochs),
+        "--imgsz",
+        str(args.imgsz),
+        "--batch",
+        str(batch),
+        "--workers",
+        str(args.workers),
+        "--device",
+        str(args.device),
+        "--project",
+        str(args.project),
+        "--name",
+        run_name,
+        "--seed",
+        str(args.seed),
+    ]
+    if args.cache != "none":
+        train_command.extend(["--cache", args.cache])
+    run(train_command, args.dry_run)
     weights = Path(args.project) / run_name / "weights" / "best.pt"
     run(
         [
@@ -192,11 +228,11 @@ def train_and_eval(args: argparse.Namespace, split_name: str, run_name: str, mod
 
 
 def main() -> None:
-    args = apply_hardware_preset(parse_args())
-    raw_dir = PROJECT_ROOT / args.raw_dir
-    yolo_dir = PROJECT_ROOT / args.yolo_dir
-    splits_dir = PROJECT_ROOT / args.splits_dir
-    outputs_dir = PROJECT_ROOT / args.outputs_dir
+    args = apply_storage_root(apply_hardware_preset(parse_args()))
+    raw_dir = Path(args.raw_dir)
+    yolo_dir = Path(args.yolo_dir)
+    splits_dir = Path(args.splits_dir)
+    outputs_dir = Path(args.outputs_dir)
 
     model_name = "yolo11n.pt" if args.debug else args.model
     epochs = 3 if args.debug else args.epochs
@@ -205,8 +241,9 @@ def main() -> None:
         args.imgsz = min(int(args.imgsz), 640)
     prefix = "debug_pidray" if args.debug else "pidray"
 
-    raw_dir.mkdir(parents=True, exist_ok=True)
-    outputs_dir.mkdir(parents=True, exist_ok=True)
+    if not args.dry_run:
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        outputs_dir.mkdir(parents=True, exist_ok=True)
 
     if not args.skip_download:
         run(
@@ -344,7 +381,7 @@ def main() -> None:
     )
 
     if args.experiment_set == "full":
-        crops_dir = PROJECT_ROOT / "object_crops"
+        crops_dir = Path(args.object_crops_dir)
         run(
             [
                 sys.executable,

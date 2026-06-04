@@ -9,12 +9,16 @@ IMGSZ="${IMGSZ:-}"
 BATCH="${BATCH:-}"
 WORKERS="${WORKERS:-}"
 DEVICE="${DEVICE:-0}"
+CACHE="${CACHE:-none}"
 RAW_DIR="${RAW_DIR:-datasets/pidray_raw}"
+STORAGE_ROOT="${STORAGE_ROOT:-/workspace/CIXDet_data}"
 
 CMD=(python scripts/run_pidray_pipeline.py \
   --raw-dir "$RAW_DIR" \
+  --storage-root "$STORAGE_ROOT" \
   --hardware-preset "$HARDWARE_PRESET" \
   --experiment-set "$EXPERIMENT_SET" \
+  --cache "$CACHE" \
   --device "$DEVICE")
 
 if [[ -n "$MODEL" ]]; then CMD+=(--model "$MODEL"); fi

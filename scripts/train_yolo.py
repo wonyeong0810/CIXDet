@@ -26,6 +26,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--amp", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--patience", type=int, default=20)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--cache",
+        choices=["ram", "disk"],
+        help="Optional Ultralytics image cache mode. Use disk for safer speedups, ram only when system RAM is ample.",
+    )
     return parser.parse_args()
 
 
@@ -79,6 +84,7 @@ def main() -> None:
             amp=args.amp,
             patience=args.patience,
             seed=args.seed,
+            cache=args.cache if args.cache else False,
         )
     except RuntimeError as exc:
         if "out of memory" in str(exc).lower():
@@ -94,4 +100,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

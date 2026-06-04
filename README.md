@@ -170,11 +170,37 @@ pip install -r requirements.txt
 python scripts/run_pidray_pipeline.py --hardware-preset rtx5090 --experiment-set balanced --device 0
 ```
 
+On a RunPod Pod, write generated data to the persistent volume instead of the container disk:
+
+```bash
+python scripts/run_pidray_pipeline.py --runpod --hardware-preset rtx5090 --experiment-set balanced --device 0
+```
+
+By default, `--runpod` stores generated files under `/workspace/CIXDet_data`:
+
+- `/workspace/CIXDet_data/datasets/pidray_raw`
+- `/workspace/CIXDet_data/dataset_yolo`
+- `/workspace/CIXDet_data/runs/detect`
+- `/workspace/CIXDet_data/outputs`
+- `/workspace/CIXDet_data/object_crops`
+
+If your RunPod volume is mounted somewhere else, use:
+
+```bash
+python scripts/run_pidray_pipeline.py --storage-root /your/volume/path/CIXDet_data --hardware-preset rtx5090 --experiment-set balanced --device 0
+```
+
 Or use the bash wrapper:
 
 ```bash
 chmod +x scripts/run_pidray_pipeline_linux.sh
 ./scripts/run_pidray_pipeline_linux.sh
+```
+
+The wrapper defaults to `STORAGE_ROOT=/workspace/CIXDet_data`. Override it if your mount path differs:
+
+```bash
+STORAGE_ROOT=/your/volume/path/CIXDet_data ./scripts/run_pidray_pipeline_linux.sh
 ```
 
 Override defaults through environment variables:
@@ -183,10 +209,16 @@ Override defaults through environment variables:
 EXPERIMENT_SET=full HARDWARE_PRESET=rtx5090 DEVICE=0 ./scripts/run_pidray_pipeline_linux.sh
 ```
 
-The RTX 5090 preset uses `yolo11m.pt`, `imgsz=768`, `batch=8`, `epochs=100`, and `workers=8`. If CUDA runs out of memory, keep the preset and override only the batch size:
+The RTX 5090 preset keeps the stronger model and longer run while using a faster image size: `yolo11m.pt`, `imgsz=640`, `batch=16`, `epochs=100`, and `workers=8`:
 
 ```bash
-python scripts/run_pidray_pipeline.py --hardware-preset rtx5090 --experiment-set balanced --batch 4 --device 0
+python scripts/run_pidray_pipeline.py --hardware-preset rtx5090 --experiment-set balanced --device 0
+```
+
+If CUDA runs out of memory, keep the preset and override only the batch size:
+
+```bash
+python scripts/run_pidray_pipeline.py --hardware-preset rtx5090 --experiment-set balanced --batch 8 --device 0
 ```
 
 Quick smoke test:
