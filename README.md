@@ -176,6 +176,12 @@ On a RunPod Pod, write generated data to the persistent volume instead of the co
 python scripts/run_pidray_pipeline.py --runpod --hardware-preset rtx5090 --experiment-set balanced --device 0
 ```
 
+To reduce volume usage during extraction, delete archives after each successful extract:
+
+```bash
+python scripts/run_pidray_pipeline.py --runpod --hardware-preset rtx5090 --experiment-set balanced --delete-archives-after-extract --device 0
+```
+
 Run it with `nohup` after installing dependencies in the same Python environment:
 
 ```bash
@@ -226,6 +232,24 @@ To force a specific Python executable:
 
 ```bash
 PYTHON_BIN=.venv/bin/python ./scripts/run_pidray_pipeline_linux.sh
+```
+
+The wrapper also defaults to deleting archives after successful extraction. To keep downloaded archives:
+
+```bash
+DELETE_ARCHIVES_AFTER_EXTRACT=0 ./scripts/run_pidray_pipeline_linux.sh
+```
+
+If Google Drive blocks gdown with a quota message, wait and retry:
+
+```bash
+./scripts/run_pidray_pipeline_linux.sh
+```
+
+The wrapper asks gdown to continue partial downloads by default. If you manually download the missing PIDray archives into `/workspace/CIXDet_data/datasets/pidray_raw`, continue without running gdown:
+
+```bash
+SKIP_DOWNLOAD=1 ./scripts/run_pidray_pipeline_linux.sh
 ```
 
 The wrapper defaults to `STORAGE_ROOT=/workspace/CIXDet_data`. Override it if your mount path differs:

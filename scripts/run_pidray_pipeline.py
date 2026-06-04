@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import shutil
 import shlex
 import subprocess
 import sys
@@ -42,7 +43,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--copy-mode", choices=["copy", "symlink", "hardlink"], default="symlink")
     parser.add_argument("--skip-download", action="store_true", help="Use existing --raw-dir.")
+    parser.add_argument("--gdown-continue", action="store_true", help="Ask gdown to continue partial downloads when supported.")
     parser.add_argument("--skip-extract", action="store_true", help="Skip archive extraction.")
+    parser.add_argument(
+        "--delete-archives-after-extract",
+        action="store_true",
+        help="Delete each archive after it is successfully extracted to reduce persistent volume usage.",
+    )
     parser.add_argument("--reuse-conversion", action="store_true", help="Skip COCO to YOLO conversion if metadata.csv exists.")
     parser.add_argument("--experiment-set", choices=["mixed", "core", "balanced", "full"], default="core")
     parser.add_argument(
@@ -109,6 +116,19 @@ def run(command: list[str], dry_run: bool = False) -> None:
     subprocess.run(command, cwd=PROJECT_ROOT, check=True)
 
 
+def run_download(command: list[str], dry_run: bool = False) -> None:
+    try:
+        run(command, dry_run)
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(
+            "Dataset download failed. If the log mentions Google Drive quota "
+            "('Too many users have viewed or downloaded this file recently'), "
+            "this cannot be fixed by the script. Wait and rerun, download the "
+            "blocked files manually into the raw directory, or use an alternate mirror.\n"
+            "After manual download, rerun with --skip-download."
+        ) from exc
+
+
 def require_python_module(module_name: str, install_hint: str) -> None:
     if importlib.util.find_spec(module_name) is not None:
         return
@@ -133,7 +153,42 @@ def gdown_supports_remaining_ok() -> bool:
     return "--remaining-ok" in result.stdout
 
 
-def extract_archives(raw_dir: Path) -> None:
+def format_gib(num_bytes: int | float) -> str:
+    return f"{float(num_bytes) / (1024**3):.2f} GiB"
+
+
+def estimate_archive_uncompressed_size(archive: Path) -> int:
+    try:
+        if archive.suffix.lower() == ".zip":
+            with zipfile.ZipFile(archive) as zip_file:
+                return int(sum(info.file_size for info in zip_file.infolist()))
+        if tarfile.is_tarfile(archive):
+            with tarfile.open(archive) as tar:
+                return int(sum(member.size for member in tar.getmembers()))
+    except Exception:
+        return 0
+    return 0
+
+
+def ensure_enough_space_for_archive(archive: Path, target_parent: Path) -> None:
+    estimated = estimate_archive_uncompressed_size(archive)
+    if estimated <= 0:
+        return
+    free = shutil.disk_usage(target_parent).free
+    # Leave a small margin for metadata, labels, and filesystem overhead.
+    required = int(estimated * 1.05)
+    if free < required:
+        raise RuntimeError(
+            "Not enough free disk space to extract archive.\n"
+            f"Archive: {archive}\n"
+            f"Estimated extracted size: {format_gib(estimated)}\n"
+            f"Free space: {format_gib(free)}\n"
+            "Increase the RunPod volume size, remove partial extracted folders, "
+            "or use a smaller dataset/subset before rerunning."
+        )
+
+
+def extract_archives(raw_dir: Path, delete_archives_after_extract: bool = False) -> None:
     archive_paths = sorted(
         [
             path
@@ -152,6 +207,7 @@ def extract_archives(raw_dir: Path) -> None:
             print(f"Skipping already extracted archive: {archive}")
             continue
         target.mkdir(parents=True, exist_ok=True)
+        ensure_enough_space_for_archive(archive, target.parent)
         print(f"Extracting {archive} -> {target}")
         if archive.suffix.lower() == ".zip":
             with zipfile.ZipFile(archive) as zip_file:
@@ -161,6 +217,10 @@ def extract_archives(raw_dir: Path) -> None:
                 tar.extractall(target)
         else:
             print(f"Warning: unsupported archive format skipped: {archive}")
+            continue
+        if delete_archives_after_extract:
+            archive.unlink()
+            print(f"Deleted archive after extraction: {archive}")
 
 
 def score_json_for_split(path: Path, split: str) -> tuple[int, int]:
@@ -282,9 +342,11 @@ def main() -> None:
             "-O",
             raw_dir.as_posix(),
         ]
+        if args.gdown_continue:
+            download_command.append("--continue")
         if not args.dry_run and gdown_supports_remaining_ok():
             download_command.append("--remaining-ok")
-        run(download_command, args.dry_run)
+        run_download(download_command, args.dry_run)
     else:
         print(f"Skipping download; using existing raw directory: {raw_dir}")
 
@@ -292,7 +354,7 @@ def main() -> None:
         if args.dry_run:
             print("Dry run: archive extraction would run here.")
         else:
-            extract_archives(raw_dir)
+            extract_archives(raw_dir, delete_archives_after_extract=args.delete_archives_after_extract)
 
     metadata_csv = yolo_dir / "metadata.csv"
     if args.reuse_conversion and metadata_csv.exists():
