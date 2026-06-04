@@ -119,6 +119,20 @@ def require_python_module(module_name: str, install_hint: str) -> None:
     )
 
 
+def gdown_supports_remaining_ok() -> bool:
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "gdown", "--help"],
+            cwd=PROJECT_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return False
+    return "--remaining-ok" in result.stdout
+
+
 def extract_archives(raw_dir: Path) -> None:
     archive_paths = sorted(
         [
@@ -257,20 +271,20 @@ def main() -> None:
         outputs_dir.mkdir(parents=True, exist_ok=True)
 
     if not args.skip_download:
-        require_python_module("gdown", f"{sys.executable} -m pip install -r requirements.txt")
-        run(
-            [
-                sys.executable,
-                "-m",
-                "gdown",
-                "--folder",
-                args.download_url,
-                "-O",
-                raw_dir.as_posix(),
-                "--remaining-ok",
-            ],
-            args.dry_run,
-        )
+        if not args.dry_run:
+            require_python_module("gdown", f"{sys.executable} -m pip install -r requirements.txt")
+        download_command = [
+            sys.executable,
+            "-m",
+            "gdown",
+            "--folder",
+            args.download_url,
+            "-O",
+            raw_dir.as_posix(),
+        ]
+        if not args.dry_run and gdown_supports_remaining_ok():
+            download_command.append("--remaining-ok")
+        run(download_command, args.dry_run)
     else:
         print(f"Skipping download; using existing raw directory: {raw_dir}")
 
